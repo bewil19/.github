@@ -1,0 +1,61 @@
+name: deploy-site
+
+on:
+    workflow_call:
+        inputs:
+            source-path:
+                required: false
+                default: './'
+                type: string
+            rsync-options:
+                required: false
+                default: '--archive --verbose --compress --human-readable --progress --delete-after --exclude=.git* --exclude=.git/ --exclude=README.md --exclude=readme.md --exclude=.gitignore --exclude=git/ --exclude=awstats-icon --exclude=awstatsicons --exclude=icon/ --exclude=stats/ --exclude=config.json'
+                type: string
+        secrets:
+            SSH_KEY:
+                required: true
+                description: 'SSH private key for authentication.'
+            SSH_USER:
+                required: true
+                description: 'SSH user for authentication.'
+            SERVER:
+                required: true
+                description: 'Server address for deployment.'
+            SSH_PORT:
+                required: true
+                description: 'SSH port for authentication.'
+            PATH:
+                required: true
+                description: 'Path on the server where files will be deployed.'
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Validate composer.json and composer.lock
+              run: composer validate --strict
+
+            - name: Cache Composer dependencies
+              uses: actions/cache@v4
+              with:
+                path: |
+                    vendor
+                    ~/.composer/cache
+                key: ${{ runner.os }}-${{ hashFiles('**/composer.lock') }}
+
+            - name: Install dependencies
+              run: composer install --prefer-dist --no-progress --no-dev --optimize-autoloader
+          
+            - name: Sync Files
+              uses: SamKirkland/web-deploy@v1
+              with:
+                  source-path: ${{ inputs.source-path }}
+                  target-server: ${{ secrets.SERVER }}
+                  remote-user:  ${{ secrets.SSH_USER }}
+                  private-ssh-key: ${{ secrets.SSH_KEY }}
+                  destination-path: ${{ secrets.PATH }}
+                  ssh-port: ${{ secrets.SSH_PORT }}
+                  rsync-options: ${{ inputs.rsync-options }}
